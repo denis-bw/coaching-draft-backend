@@ -5,6 +5,8 @@ import { db } from '../firebaseAdminConfig.js';
 import { userSignupSchema, userSigninSchema, userEmailSchema } from '../models/user.js';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import qs from "query-string"
+import axios from "axios";
 
 export const register = async (req, res) => {
   const { JWT_SECRET } = process.env;
@@ -98,7 +100,7 @@ export const signin = async (req, res) => {
     const newToken = jwt.sign({ id: userDoc.id, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
     await userDoc.ref.update({ token: newToken });
 
-    res.status(200).json({
+    return res.status(200).json({
       id: userDoc.id,
       email: user.email,
       username: user.username,
@@ -145,7 +147,7 @@ export const getCurrent = (req, res) => {
 
 
 export const sendResetPasswordEmail = async (req, res) => {
-  const {EMAIL_USER, PASSWORD_RESET_URL, EMAIL_APP_PASSWORD  } = process.env;
+  const {EMAIL_USER, FRONTEND_URL, EMAIL_APP_PASSWORD  } = process.env;
   const { email } = req.body;
   const { error } = userEmailSchema.validate({email});
   
@@ -186,7 +188,7 @@ export const sendResetPasswordEmail = async (req, res) => {
         });
 
       
-        const resetLink = `${PASSWORD_RESET_URL}?email=${email}&token=${resetToken}`;
+        const resetLink = `${FRONTEND_URL}/reset-password?email=${email}&token=${resetToken}`;
 
         
         const transporter = nodemailer.createTransport({
@@ -323,4 +325,99 @@ export const resetPassword = async (req, res) => {
             error: 'Внутрішня помилка сервера'
         });
     }
+};
+
+
+
+
+export const googleAuth = async (req, res) => {
+  const { BASE_URL, GOOGLE_CLIENT_ID } = process.env;
+
+  const stringifiedParams = qs.stringify({
+    
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: `${BASE_URL}auth/users/google-redirect`,
+    scope: [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+    ].join(" "),
+    response_type: "code",
+    access_type: "offline",
+    prompt: "consent",
+  });
+  
+  return res.redirect(
+    `https://accounts.google.com/o/oauth2/v2/auth?${stringifiedParams}`
+  );
+};
+
+export const googleRedirect = async (req, res) => {
+  const { BASE_URL,GOOGLE_CLIENT_SECRET, GOOGLE_CLIENT_ID, JWT_SECRET, FRONTEND_URL } = process.env;
+
+  try {
+    const fullUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+    const urlObj = new URL(fullUrl);
+    const urlParams = qs.parse(urlObj.search);
+    const code = urlParams.code;
+
+   
+    const tokenData = await axios({
+      url: `https://oauth2.googleapis.com/token`,
+      method: "post",
+      data: {
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: `${BASE_URL}auth/users/google-redirect`,
+        grant_type: "authorization_code",
+        code,
+      },
+    });
+
+    
+    const userData = await axios({
+      url: "https://www.googleapis.com/oauth2/v2/userinfo",
+      method: "get",
+      headers: {
+        Authorization: `Bearer ${tokenData.data.access_token}`,
+      },
+    });
+
+    
+    const ref = db.collection('users');
+    const snapshot = await ref
+      .where('email', '==', userData.data.email.toLowerCase())
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(400).json({ message: 'Bad Request' });
+    }
+
+    const userDoc = snapshot.docs[0];
+    const user = userDoc.data();
+    
+    if (user.token) {
+      try {
+        const decoded = jwt.verify(user.token, JWT_SECRET);
+
+      return res.redirect(
+        `${FRONTEND_URL}/g?token=${user.token}`
+      );
+      } catch (err) {
+        console.log('Token expired or invalid, generating a new one');
+      }
+    }
+
+    const newToken = jwt.sign({ id: userDoc.id, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
+    await userDoc.ref.update({ token: newToken });
+ 
+    return res.redirect(
+      `${FRONTEND_URL}/g?token=${newToken}`
+    );
+  } catch (error) {
+    console.error('Google Auth Error:', error);
+    
+    return res.redirect(
+      `${FRONTEND_URL}/auth/error`
+    );
+  }
 };
