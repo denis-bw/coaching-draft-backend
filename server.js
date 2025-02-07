@@ -8,7 +8,7 @@ import authRouter from './routes/api/auth-router.js';
 const app = express();
 const formatsLogger = app.get('env') === 'development' ? 'dev' : 'short';
 
-const allowedOrigins = ['http://localhost:5173', 'https://denis-bw.github.io/coaching-draft']; 
+const allowedOrigins = ['http://localhost:5173', 'https://denis-bw.github.io']; 
 
 const corsOptions = {
   origin: function (origin, callback) {
