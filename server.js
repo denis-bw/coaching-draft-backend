@@ -8,20 +8,24 @@ import authRouter from './routes/api/auth-router.js';
 const app = express();
 const formatsLogger = app.get('env') === 'development' ? 'dev' : 'short';
 
-const allowedOrigins = ['http://localhost:5173', 'https://denis-bw.github.io']; 
+const allowedOrigins = ['http://localhost:5173', 'https://denis-bw.github.io'];
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);  
     } else {
-      callback(new Error('Not allowed by CORS')); 
+      callback(new Error('Not allowed by CORS'));  
     }
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],  
 };
 
-app.use(logger(formatsLogger)); 
 app.use(cors(corsOptions));  
+app.options('*', cors(corsOptions));  
+
+app.use(logger(formatsLogger));  
 app.use(express.json());  
 app.use(express.static('public'));  
 
