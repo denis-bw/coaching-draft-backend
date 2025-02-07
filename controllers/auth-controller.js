@@ -32,8 +32,8 @@ export const register = async (req, res) => {
       email, 
       password: hashedPassword, 
       username,
-      resetToken,
-      resetTokenExpiry,
+      resetToken: null,
+      resetTokenExpiry: null,
     });
 
     const token = jwt.sign(
