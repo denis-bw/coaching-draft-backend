@@ -34,6 +34,9 @@ export const register = async (req, res) => {
       username,
       resetToken: null,
       resetTokenExpiry: null,
+      location: null,
+      dateOfBirth: null,
+      imageProfile: null,
     });
 
     const token = jwt.sign(
@@ -48,7 +51,10 @@ export const register = async (req, res) => {
       id: docRef.id,
       email,
       username,
-      token 
+      location: null,
+      dateOfBirth: null,
+      imageProfile: null,
+      token,
     });
   } catch (error) {
     console.error("Error adding data:", error);
@@ -90,6 +96,9 @@ export const signin = async (req, res) => {
           id: userDoc.id,
           email: user.email,
           username: user.username,
+          location: user.location,
+          dateOfBirth:  user.dateOfBirth,
+          imageProfile:  user.imageProfile,
           token: user.token,
         });
       } catch (err) {
@@ -104,6 +113,9 @@ export const signin = async (req, res) => {
       id: userDoc.id,
       email: user.email,
       username: user.username,
+      location: user.location,
+      dateOfBirth:  user.dateOfBirth,
+      imageProfile:  user.imageProfile,
       token: newToken,
     });
 
@@ -129,12 +141,25 @@ export const logout = async (req, res) => {
 };
 
 
-export const getCurrent = (req, res) => {
-  const { email, username } = req.user;
+export const getCurrent = async (req, res) => {
+  const { email } = req.user;
 
+  const ref = db.collection('users');
+  const snapshot = await ref.where('email', '==', email.toLowerCase()).get();
+  
+  if (snapshot.empty) {
+      return res.status(400).json({ message: 'Bad Request' });
+    }
+
+  const userDoc = snapshot.docs[0];
+  const user = userDoc.data();
+  
   res.json({
     email,
-    username
+    username: user.username,
+    location: user.location,
+    dateOfBirth:  user.dateOfBirth,
+    imageProfile:  user.imageProfile,
   });
 };
 
@@ -389,7 +414,9 @@ export const googleRedirect = async (req, res) => {
       .get();
 
     if (snapshot.empty) {
-      return res.status(400).json({ message: 'Bad Request' });
+      return res.redirect(
+      `${FRONTEND_URL}/auth/error`
+    );
     }
 
     const userDoc = snapshot.docs[0];

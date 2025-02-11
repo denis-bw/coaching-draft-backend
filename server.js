@@ -4,6 +4,7 @@ import cors from 'cors';
 
 import {initializeFirebase} from './firebaseAdminConfig.js'; 
 import authRouter from './routes/api/auth-router.js';
+import profileRouter from './routes/api/user-profile-router.js'
 
 const app = express();
 const formatsLogger = app.get('env') === 'development' ? 'dev' : 'short';
@@ -52,7 +53,7 @@ async function startServer() {
 startServer();
 
 app.use('/api/auth', authRouter);
-
+app.use('/api/auth', profileRouter);
 app.use((req, res) => {
   res.status(404).json({ message: 'Not found' });
 });
