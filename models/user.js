@@ -49,9 +49,6 @@ export const updateUserProfileSchema = Joi.object({
   location: Joi.string().max(50).allow("", null).optional().messages({
     "string.max": "Локація повинна містити не більше 50 символів",
   }),
-  imageProfile: Joi.string().uri().allow("", null).optional().messages({
-    "string.uri": "Посилання на зображення повинно бути дійсним URL",
-  }),
   dateOfBirth: Joi.string().allow(null).optional().messages({
     "date.base": "Дата народження повинна бути валідною датою",
   }),

@@ -36,7 +36,7 @@ export const register = async (req, res) => {
       resetTokenExpiry: null,
       location: null,
       dateOfBirth: null,
-      imageProfile: null,
+      avatar: null,
     });
 
     const token = jwt.sign(
@@ -53,7 +53,7 @@ export const register = async (req, res) => {
       username,
       location: null,
       dateOfBirth: null,
-      imageProfile: null,
+      avatar: null,
       token,
     });
   } catch (error) {
@@ -98,7 +98,7 @@ export const signin = async (req, res) => {
           username: user.username,
           location: user.location,
           dateOfBirth:  user.dateOfBirth,
-          imageProfile:  user.imageProfile,
+          avatar:  user.avatar,
           token: user.token,
         });
       } catch (err) {
@@ -115,7 +115,7 @@ export const signin = async (req, res) => {
       username: user.username,
       location: user.location,
       dateOfBirth:  user.dateOfBirth,
-      imageProfile:  user.imageProfile,
+      avatar:  user.avatar,
       token: newToken,
     });
 
@@ -159,7 +159,7 @@ export const getCurrent = async (req, res) => {
     username: user.username,
     location: user.location,
     dateOfBirth:  user.dateOfBirth,
-    imageProfile:  user.imageProfile,
+    avatar:  user.avatar,
   });
 };
 
