@@ -22,6 +22,6 @@ const upload = multer({
 
 const profileRouter = express.Router();
 
-profileRouter.put('/users/updateprofile', upload.single('avatar'), authenticate, updateUserProfile);
+profileRouter.put('/users/updateprofile', authenticate, upload.single('avatar'),  updateUserProfile);
 
 export default profileRouter;
