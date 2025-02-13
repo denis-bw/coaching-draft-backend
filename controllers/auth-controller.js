@@ -7,6 +7,7 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import qs from "query-string"
 import axios from "axios";
+import { resetLoginAttempts } from "../middlewares/authPassword.js";
 
 export const register = async (req, res) => {
   const { JWT_SECRET } = process.env;
@@ -91,7 +92,7 @@ export const signin = async (req, res) => {
     if (user.token) {
       try {
         const decoded = jwt.verify(user.token, JWT_SECRET);
-
+        resetLoginAttempts(email)
         return res.status(200).json({
           id: userDoc.id,
           email: user.email,
@@ -108,7 +109,7 @@ export const signin = async (req, res) => {
 
     const newToken = jwt.sign({ id: userDoc.id, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
     await userDoc.ref.update({ token: newToken });
-
+    resetLoginAttempts(email)
     return res.status(200).json({
       id: userDoc.id,
       email: user.email,

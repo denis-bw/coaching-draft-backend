@@ -16,7 +16,6 @@ authRouter.post("/users/forgot-password", sendResetPasswordEmail);
 authRouter.post("/users/reset-password", resetPassword)
 
 authRouter.get("/users/google", googleAuth);
-
 authRouter.get("/users/google-redirect", googleRedirect);
 
 export default authRouter;

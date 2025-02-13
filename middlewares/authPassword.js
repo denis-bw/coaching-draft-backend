@@ -1,13 +1,12 @@
-import rateLimit from 'express-rate-limit';
-import nodemailer from "nodemailer";
+import rateLimit from 'express-rate-limit'; 
+import nodemailer from "nodemailer"; 
 import 'dotenv/config';
-
 
 const sentEmails = new Set(); 
 
 const sendEmailAlert = async (email) => {
   const { EMAIL_USER, EMAIL_APP_PASSWORD } = process.env;
-  
+
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -47,12 +46,15 @@ const emailLimiter = rateLimit({
   },
 });
 
-
-
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, 
   max: 10, 
   message: { message: "Забагато спроб входу з вашого IP, спробуйте пізніше." },
 });
 
-export { loginLimiter, emailLimiter };
+const resetLoginAttempts = (email) => {
+  emailLimiter.resetKey(email); 
+};
+
+export { loginLimiter, emailLimiter, resetLoginAttempts };
+  
