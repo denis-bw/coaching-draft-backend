@@ -1,5 +1,5 @@
-import rateLimit from 'express-rate-limit'; 
-import nodemailer from "nodemailer"; 
+import rateLimit from 'express-rate-limit';
+import nodemailer from 'nodemailer';
 import 'dotenv/config';
 
 const sentEmails = new Set(); 
@@ -31,7 +31,7 @@ const sendEmailAlert = async (email) => {
 };
 
 const emailLimiter = rateLimit({
-  keyGenerator: (req) => req.body.email,
+  keyGenerator: (req) => req.body.email, 
   windowMs: 15 * 60 * 1000, 
   max: 5,
   message: { message: "Забагато спроб входу для цього акаунту, спробуйте пізніше." },
@@ -52,9 +52,5 @@ const loginLimiter = rateLimit({
   message: { message: "Забагато спроб входу з вашого IP, спробуйте пізніше." },
 });
 
-const resetLoginAttempts = (email) => {
-  emailLimiter.resetKey(email); 
-};
+export { loginLimiter, emailLimiter };
 
-export { loginLimiter, emailLimiter, resetLoginAttempts };
-  
