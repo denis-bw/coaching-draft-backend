@@ -1,6 +1,7 @@
 import express from 'express';
 import logger from 'morgan';
 import cors from 'cors';
+import helmet from 'helmet';
 
 import {initializeFirebase} from './firebaseAdminConfig.js'; 
 import authRouter from './routes/api/auth-router.js';
@@ -24,6 +25,22 @@ const corsOptions = {
   preflightContinue: false,
   optionsSuccessStatus: 200,
 };
+
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.firebaseio.com", "https://*.googleapis.com"], 
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", ...allowedOrigins, "https://*.firebaseio.com", "https://*.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  })
+);
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
@@ -50,8 +67,6 @@ async function startServer() {
   }
 }
 
-startServer();
-
 app.use('/api/auth', authRouter);
 app.use('/api/auth', profileRouter);
 app.use((req, res) => {
@@ -64,3 +79,4 @@ app.use((err, req, res, next) => {
 });
 
 
+startServer();

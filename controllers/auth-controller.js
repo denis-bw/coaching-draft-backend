@@ -227,37 +227,125 @@ export const sendResetPasswordEmail = async (req, res) => {
 
         
         const mailOptions = {
-            from: EMAIL_USER,
-            to: email,
-            subject: 'Відновлення пароля',
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #333;">Відновлення пароля</h2>
-                    <p>Ви отримали цей лист, тому що запросили відновлення пароля для вашого облікового запису.</p>
-                    <p>Для встановлення нового пароля, будь ласка, перейдіть за посиланням:</p>
-                    <p>
-                        <a 
-                            href="${resetLink}" 
-                            style="
-                                background-color: #67BC8E; 
-                                color: white; 
-                                padding: 10px 20px; 
-                                text-decoration: none; 
-                                border-radius: 5px;
-                                display: inline-block;
-                            "
-                        >
-                            Встановити новий пароль
-                        </a>
-                    </p>
-                    <p>Посилання дійсне протягом 1 години.</p>
-                    <p>Якщо ви не запитували відновлення пароля, проігноруйте цей лист.</p>
-                    <p style="color: #666; font-size: 12px;">
-                        Це автоматичний лист, будь ласка, не відповідайте на нього.
-                    </p>
+    from: EMAIL_USER,
+    to: email,
+    subject: 'Відновлення пароля',
+    html: `
+        <!DOCTYPE html>
+        <html lang="uk">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Відновлення пароля</title>
+            <style>
+                body {
+                    font-family: 'Arial', sans-serif;
+                    line-height: 1.6;
+                    color: #333333;
+                    background-color: #f5f5f5;
+                    margin: 0;
+                    padding: 0;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: #ffffff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                }
+                .header {
+                    text-align: center;
+                    padding-bottom: 15px;
+                    border-bottom: 1px solid #eeeeee;
+                    margin-bottom: 20px;
+                }
+                .logo {
+                    margin-bottom: 15px;
+                }
+                h2 {
+                    color: #2c3e50;
+                    margin-top: 0;
+                    margin-bottom: 20px;
+                    font-weight: 600;
+                }
+                .content {
+                    padding: 20px 0;
+                }
+                .button {
+                    background-color: #67BC8E;
+                    color: white !important;
+                    padding: 12px 24px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    display: inline-block;
+                    margin: 20px 0;
+                    text-align: center;
+                    transition: background-color 0.3s ease;
+                }
+                .button:hover {
+                    background-color: #5aa67c;
+                }
+                .footer {
+                    margin-top: 20px;
+                    padding-top: 20px;
+                    border-top: 1px solid #eeeeee;
+                    color: #999999;
+                    font-size: 12px;
+                    text-align: center;
+                }
+                .time-notice {
+                    font-weight: bold;
+                    color: #e74c3c;
+                }
+                .ignore-notice {
+                    margin-top: 20px;
+                    color: #555555;
+                }
+                @media only screen and (max-width: 480px) {
+                    .container {
+                        padding: 10px;
+                    }
+                    .content {
+                        padding: 10px 0;
+                    }
+                    .button {
+                        display: block;
+                        width: 100%;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <!-- Тут можна додати логотип -->
+                    <!-- <img class="logo" src="your-logo-url.png" alt="Логотип компанії" height="50"> -->
+                    <h2>Відновлення пароля</h2>
                 </div>
-            `
-        };
+                <div class="content">
+                    <p>Шановний користувачу,</p>
+                    <p>Ви отримали цей лист, тому що запросили відновлення пароля для вашого облікового запису.</p>
+                    <p>Для встановлення нового пароля, будь ласка, натисніть на кнопку нижче:</p>
+                    
+                    <div style="text-align: center;">
+                        <a href="${resetLink}" class="button">Встановити новий пароль</a>
+                    </div>
+                    
+                    <p class="time-notice">⚠️ Посилання дійсне протягом 1 години.</p>
+                    
+                    <p class="ignore-notice">Якщо ви не запитували відновлення пароля, проігноруйте цей лист або зверніться до служби підтримки.</p>
+                </div>
+                <div class="footer">
+                    <p>Це автоматичний лист, будь ласка, не відповідайте на нього.</p>
+                    <p>© ${new Date().getFullYear()} Coach's Sketch. Всі права захищені.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+    `
+};
 
        
         await transporter.sendMail(mailOptions);
