@@ -8,6 +8,7 @@ import authRouter from './routes/api/auth-router.js';
 import profileRouter from './routes/api/user-profile-router.js'
 
 const app = express();
+app.set('trust proxy', 1);
 const formatsLogger = app.get('env') === 'development' ? 'dev' : 'short';
 
 const allowedOrigins = ['http://localhost:5173', 'https://denis-bw.github.io'];
