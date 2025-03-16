@@ -1,7 +1,6 @@
 import express from 'express';
 import logger from 'morgan';
 import cors from 'cors';
-import helmet from 'helmet';
 
 import {initializeFirebase} from './firebaseAdminConfig.js'; 
 import authRouter from './routes/api/auth-router.js';
@@ -27,22 +26,6 @@ const corsOptions = {
   optionsSuccessStatus: 200,
 };
 
-app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.firebaseio.com", "https://*.googleapis.com"], 
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'", ...allowedOrigins, "https://*.firebaseio.com", "https://*.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-    },
-  })
-);
-
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
@@ -51,7 +34,6 @@ app.use(express.json());
 app.use(express.static('public'));  
 
 const PORT = process.env.PORT || 3000;
-
 
 async function startServer() {
   try {
@@ -78,6 +60,5 @@ app.use((err, req, res, next) => {
   const { status = 500, message = 'Server error' } = err;
   res.status(status).json({ message });
 });
-
 
 startServer();
