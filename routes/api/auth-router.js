@@ -1,5 +1,14 @@
 import express from 'express';
-import { register, signin, logout, getCurrent, sendResetPasswordEmail, resetPassword, googleAuth, googleRedirect } from '../../controllers/auth-controller.js'; 
+import {
+    register,
+    signin,
+    logout,
+    getCurrent,
+    sendResetPasswordEmail,
+    resetPassword,
+    googleAuth,
+    googleRedirect
+} from '../../controllers/auth-controller.js'; 
 
 import authenticate from "../../middlewares/authenticate.js";
 

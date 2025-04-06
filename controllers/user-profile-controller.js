@@ -1,8 +1,6 @@
 import { db } from '../firebaseAdminConfig.js'; 
 import { updateUserProfileSchema } from '../models/user.js';
 import { v2 as cloudinary } from 'cloudinary';
-import fs from 'fs/promises';
-import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -27,13 +25,9 @@ export const updateUserProfile = async (req, res) => {
     const { error, value } = updateUserProfileSchema.validate(userData, { abortEarly: false });
     if (error) {
       if (req.file) {
-        try {
-          await fs.unlink(req.file.path);
-        } catch (err) {
-          console.error("Помилка при видаленні тимчасового файлу:", err);
-        }
+        await deleteTempFile(req.file.path); 
       }
-      
+
       return res.status(400).json({
         message: "Помилка, Некоректно введені дані",
         errors: error.details.map((err) => err.message),
@@ -45,13 +39,9 @@ export const updateUserProfile = async (req, res) => {
 
     if (snapshot.empty) {
       if (req.file) {
-        try {
-          await fs.unlink(req.file.path);
-        } catch (err) {
-          console.error("Помилка при видаленні тимчасового файлу:", err);
-        }
+        await deleteTempFile(req.file.path); 
       }
-      
+
       return res.status(404).json({ message: "Користувача не знайдено" });
     }
 
@@ -59,16 +49,15 @@ export const updateUserProfile = async (req, res) => {
     const userDataFromDB = snapshot.docs[0].data();
 
     if (req.file) {
-      filePath = req.file.path;
+   
 
       if (userDataFromDB.avatar) {
         try {
           const oldAvatarUrl = userDataFromDB.avatar;
-
           const urlParts = oldAvatarUrl.split('/');
           const fileName = urlParts[urlParts.length - 1];
           const publicId = `avatars/${fileName.split('.')[0]}`;
-          
+
           await cloudinary.uploader.destroy(publicId);
         } catch (err) {
           console.error("Помилка при видаленні старого аватара з Cloudinary:", err);
@@ -77,43 +66,46 @@ export const updateUserProfile = async (req, res) => {
 
       try {
         const uniqueId = `user_${snapshot.docs[0].id}_${Date.now()}`;
-        
-        const cloudinaryResponse = await cloudinary.uploader.upload(filePath, {
-          folder: "avatars",
-          transformation: [{ width: 150, height: 150, crop: "fill" }],
-          public_id: uniqueId,
- 
-          resource_type: "image"
-        });
 
-        userData.avatar = cloudinaryResponse.secure_url;
+        const cloudinaryResponse = await cloudinary.uploader.upload_stream(
+          { 
+            folder: "avatars",
+            transformation: [{ width: 150, height: 150, crop: "fill" }],
+            public_id: uniqueId,
+            resource_type: "image"
+          },
+          async (error, result) => {
+            if (error) {
+              return res.status(500).json({ message: "Помилка при завантаженні зображення в Cloudinary", error });
+            }
+
+            userData.avatar = result.secure_url;
+            await userDoc.update(userData);
+
+            res.status(200).json({ message: "Профіль оновлено", updatedFields: userData });
+          }
+        );
+
+        cloudinaryResponse.end(req.file.buffer);
+
       } catch (cloudinaryError) {
         console.error("Помилка при завантаженні зображення в Cloudinary:", cloudinaryError);
         return res.status(500).json({ message: "Помилка при завантаженні зображення" });
-      } finally {
- 
-        try {
-          await fs.unlink(filePath);
-        } catch (err) {
-          console.error("Помилка при видаленні тимчасового файлу:", err);
-        }
       }
+    } else {
+
+      await userDoc.update(userData);
+
+      res.status(200).json({ message: "Профіль оновлено", updatedFields: userData });
     }
 
-    await userDoc.update(userData);
-
-    res.status(200).json({ message: "Профіль оновлено", updatedFields: userData });
   } catch (error) {
     console.error("Помилка при оновленні профілю:", error);
 
     if (req.file) {
-      try {
-        await fs.unlink(req.file.path);
-      } catch (err) {
-        console.error("Помилка при видаленні тимчасового файлу:", err);
-      }
+      await deleteTempFile(req.file.path); 
     }
-    
+
     res.status(500).json({ message: "Помилка сервера" });
   }
 };

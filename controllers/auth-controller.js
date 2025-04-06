@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import qs from "query-string"
 import axios from "axios";
-
+import { resetUserLimiter } from "../middlewares/authPassword.js";
 
 export const register = async (req, res) => {
   const { JWT_SECRET } = process.env;
@@ -59,7 +59,7 @@ export const register = async (req, res) => {
     });
   } catch (error) {
     console.error("Error adding data:", error);
-    res.status(500).json({ message: 'Error adding user data', error: error.message });
+    res.status(500).json({ message: 'Error adding user data' });
   }
 };
 
@@ -109,7 +109,8 @@ export const signin = async (req, res) => {
 
     const newToken = jwt.sign({ id: userDoc.id, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
     await userDoc.ref.update({ token: newToken });
-
+    resetUserLimiter(email)
+    
     return res.status(200).json({
       id: userDoc.id,
       email: user.email,
@@ -121,7 +122,7 @@ export const signin = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: 'Error signing in', error: error.message });
+    res.status(500).json({ message: 'Error signing in' });
   }
 };
 
@@ -137,7 +138,7 @@ export const logout = async (req, res) => {
     res.status(200).json({ message: 'User logged out successfully' });
   } catch (error) {
     console.error("Error logging out:", error);
-    res.status(500).json({ message: 'Error during logout', error: error.message });
+    res.status(500).json({ message: 'Error during logout' });
   }
 };
 
