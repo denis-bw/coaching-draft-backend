@@ -13,19 +13,39 @@ export const createAthlete = async (req, res) => {
   try {
     const userId = req.user?.id;
     
-    // Перевірка, чи є дані в тілі запиту
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({ 
         message: "Помилка отримання даних", 
-        error: "Тіло запиту порожнє або не містить JSON" 
+        error: "Тіло запиту порожнє або не містить даних" 
       });
     }
     
-    // Отримати дані з тіла запиту
     const data = req.body;
-    console.log("req.body:", data); // для дебагу
+   console.log(data) 
+    if (data.previousEstablishments) {
+      try {
+        data.previousEstablishments = JSON.parse(data.previousEstablishments);
+      } catch (e) {
+        console.error("Error parsing previousEstablishments:", e);
+      }
+    }
     
-    // Валідація даних з використанням .unknown(true) для дозволу додаткових полів
+    if (data.medicalInformation) {
+      try {
+        data.medicalInformation = JSON.parse(data.medicalInformation);
+      } catch (e) {
+        console.error("Error parsing medicalInformation:", e);
+      }
+    }
+    
+    if (data.parentsInformation) {
+      try {
+        data.parentsInformation = JSON.parse(data.parentsInformation);
+      } catch (e) {
+        console.error("Error parsing parentsInformation:", e);
+      }
+    }
+    
     const { error, value } = athleteSchema.validate(data, { abortEarly: false });
     if (error) {
       return res.status(400).json({ message: 'Помилка валідації', details: error.details });
@@ -34,15 +54,14 @@ export const createAthlete = async (req, res) => {
     const athleteRef = db.collection('athletes').doc();
     const athleteId = athleteRef.id;
     
-    // Підготовка основних даних спортсмена
     const athleteData = {
       ...value,
       userId,
       createdAt: new Date().toISOString(),
     };
     
-    // Якщо є фото — завантажити
-    if (req.file) {
+    
+    if (req.file && req.file.buffer) {
       const uniqueId = `athlete_${userId}_${Date.now()}`;
       const uploadResult = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
@@ -64,10 +83,8 @@ export const createAthlete = async (req, res) => {
       athleteData.photo = null;
     }
     
-    // Зберегти основні дані спортсмена
     await athleteRef.set(athleteData);
     
-    // Запис попередніх тренерів, тільки якщо масив не пустий
     if (value.previousCoaches && Array.isArray(value.previousCoaches) && value.previousCoaches.length > 0) {
       const batch = db.batch();
       value.previousCoaches.forEach((coach) => {
@@ -77,7 +94,6 @@ export const createAthlete = async (req, res) => {
       await batch.commit();
     }
     
-    // Запис медоглядів, тільки якщо масив не пустий
     if (value.medicalExaminations && Array.isArray(value.medicalExaminations) && value.medicalExaminations.length > 0) {
       const batch = db.batch();
       value.medicalExaminations.forEach((exam) => {
@@ -87,7 +103,6 @@ export const createAthlete = async (req, res) => {
       await batch.commit();
     }
     
-    // Запис родичів, тільки якщо масив не пустий
     if (value.relatives && Array.isArray(value.relatives) && value.relatives.length > 0) {
       const batch = db.batch();
       value.relatives.forEach((relative) => {
