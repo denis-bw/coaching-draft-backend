@@ -34,7 +34,7 @@ const authenticate = async (req, res, next) => {
     const userDoc = await userRef.get();
 
     if (!userDoc.exists || userDoc.data().token !== token) {
-      return res.status(401).json({ message: "User not authorized" });
+      return res.status(401).json({ message: "Користувач не авторизований" });
     }
 
     req.user = { ...userDoc.data(), id: decoded.id };

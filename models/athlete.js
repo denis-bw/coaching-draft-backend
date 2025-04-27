@@ -16,10 +16,11 @@ const athleteSchema = Joi.object({
   notes: Joi.string().allow(null, ''),
   school: Joi.string().allow(null, ''),
   university: Joi.string().allow(null, ''),
-  name: Joi.string().allow(null, ''),       
+  currentSportInstitution: Joi.string().required(),     
   trainer: Joi.string().required(),        
   trainerContacts: Joi.string().allow(null, ''), 
   entryDate: Joi.date().required(),        
+  teamId: Joi.string().allow(null, ''), 
   
   previousEstablishments: Joi.array().items( 
     Joi.object({
@@ -47,6 +48,6 @@ const athleteSchema = Joi.object({
       relationship: Joi.string().allow(null, ''),
     })
   ).optional().allow(null),
-}).unknown(true);
+})
 
 export default athleteSchema;

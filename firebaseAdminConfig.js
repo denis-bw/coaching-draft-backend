@@ -4,7 +4,7 @@ import 'dotenv/config';
 const { DB_CREDENTIALS_PATH } = process.env;
 import { readFile } from 'fs/promises';
 
-let db; // Оголошуємо змінну для db
+let db;
 
 async function initializeFirebase() {
   try {
@@ -16,7 +16,7 @@ async function initializeFirebase() {
     });
 
     db = admin.firestore(); 
-
+    
     return { admin, db };
   } catch (error) {
     console.error("Error initializing Firebase:", error);
@@ -24,4 +24,4 @@ async function initializeFirebase() {
   }
 }
 
-export { initializeFirebase, db }; 
+export { initializeFirebase, db, admin }; 
