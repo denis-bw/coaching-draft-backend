@@ -9,48 +9,40 @@ cloudinary.config({
   secure: true,
 });
 
+
 export const createTeam = async (req, res) => {
   try {
     const userId = req.user?.id;
+   
+    const { name, ageCategory, athleteIds = [] } = req.body;
     
-    if (!userId) {
-      return res.status(401).json({ 
-        message: "Помилка авторизації", 
-        error: "Користувач не авторизований" 
-      });
-    }
+    const { error, value } = teamSchema.validate({
+      name,
+      ageCategory,
+      athleteIds
+    }, { abortEarly: false });
 
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({ 
-        message: "Порожній запит", 
-        error: "Немає даних для створення команди" 
-      });
-    }
-
-    const data = req.body;
-
-    if (data.athleteIds && typeof data.athleteIds === 'string') {
-      try {
-        data.athleteIds = JSON.parse(data.athleteIds);
-      } catch (e) {
-        console.error("Не вдалося розпарсити athleteIds:", e);
-      }
-    }
-
-    const { error, value } = teamSchema.validate(data, { abortEarly: false });
     if (error) {
-      return res.status(400).json({ message: 'Помилка валідації', details: error.details });
+      return res.status(400).json({ 
+        message: 'Помилка валідації', 
+        details: error.details 
+      });
     }
 
+    // Створюємо посилання на документ команди
     const teamRef = db.collection('teams').doc();
     const teamId = teamRef.id;
 
     const teamData = {
-      ...value,
+      name: value.name,
+      ageCategory: value.ageCategory,
       userId,
+      athleteIds: value.athleteIds,
       createdAt: new Date().toISOString(),
+      logo: null
     };
 
+    // Обробка завантаження фото команди
     if (req.file && req.file.buffer) {
       const uniqueId = `team_${userId}_${Date.now()}`;
       const uploadResult = await new Promise((resolve, reject) => {
@@ -67,13 +59,77 @@ export const createTeam = async (req, res) => {
         );
         stream.end(req.file.buffer);
       });
-
+      
       teamData.logo = uploadResult.secure_url;
-    } else {
-      teamData.logo = null;
     }
 
-    await teamRef.set(teamData);
+    // Перевіряємо наявність та доступ до спортсменів
+    if (value.athleteIds && value.athleteIds.length > 0) {
+      const batch = db.batch();
+      const invalidAthletes = [];
+      const athleteRefs = [];
+
+      // Отримуємо дані про всіх спортсменів
+      for (const athleteId of value.athleteIds) {
+        const athleteRef = db.collection('athletes').doc(athleteId);
+        athleteRefs.push({ ref: athleteRef, id: athleteId });
+        
+        const athleteDoc = await athleteRef.get();
+        
+        // Перевіряємо існування спортсмена
+        if (!athleteDoc.exists) {
+          invalidAthletes.push({ 
+            id: athleteId, 
+            error: "Спортсмен не існує" 
+          });
+          continue;
+        }
+        
+        const athleteData = athleteDoc.data();
+        
+        // Перевіряємо, чи належить спортсмен поточному користувачу
+        if (athleteData.userId !== userId) {
+          invalidAthletes.push({ 
+            id: athleteId, 
+            error: "Немає доступу до цього спортсмена" 
+          });
+          continue;
+        }
+        
+        // Перевіряємо, чи спортсмен вже в іншій команді
+        if (athleteData.teamId?.trim?.()) {
+          invalidAthletes.push({
+            id: athleteId, 
+            error: "Спортсмен вже в іншій команді"
+          });
+          continue;
+        }
+      }
+      console.log(invalidAthletes)
+      if (invalidAthletes.length > 0) {
+        return res.status(400).json({
+          message: "Помилка при додаванні спортсменів до команди",
+          invalidAthletes
+        });
+      }
+
+      // Оновлюємо кожного спортсмена, додаючи ID нової команди
+      for (const { ref } of athleteRefs) {
+        batch.update(ref, { 
+          teamId,
+          updatedAt: new Date().toISOString() 
+        });
+      }
+
+      // Створюємо нову команду
+      batch.set(teamRef, teamData);
+
+      // Застосовуємо всі зміни одночасно
+      await batch.commit();
+    } else {
+      // Якщо немає спортсменів, просто створюємо команду
+      await teamRef.set(teamData);
+    }
 
     return res.status(201).json({
       message: "Команда створена успішно",
@@ -84,7 +140,10 @@ export const createTeam = async (req, res) => {
     });
   } catch (err) {
     console.error("Помилка при створенні команди:", err);
-    return res.status(500).json({ message: "Помилка сервера при створенні команди", error: err.message });
+    return res.status(500).json({ 
+      message: "Помилка сервера при створенні команди", 
+      error: err.message 
+    });
   }
 };
 
