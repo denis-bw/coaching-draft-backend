@@ -261,51 +261,23 @@ export async function searchAthletes(req, res) {
       });
     }
 
-    const { query = "all", teamId = null, page = 1, filter = 'all' } = req.query;
+    const { query = "", page = 1, filter = 'all' } = req.query;
     const offset = (page - 1) * PAGE_SIZE;
   
     let query_db = db.collection('athletes').where('userId', '==', userId);
-
-    if (teamId) {
-
-      const teamDoc = await db.collection('teams').doc(teamId).get();
-      
-      if (!teamDoc.exists) {
-        return res.status(404).json({
-          message: "Команду не знайдено",
-          error: "Команда з вказаним ID не існує"
-        });
-      }
-      
-      const teamData = teamDoc.data();
-      if (teamData.userId !== userId) {
-        return res.status(403).json({
-          message: "Відмовлено в доступі",
-          error: "У вас немає прав доступу до цієї команди"
-        });
-      }
-      
-      query_db = query_db.where('teamId', '==', teamId);
-    } 
-    else if (filter === 'withTeam') {
-      // В Firestore не можна використовувати != null, тому фільтруємо на рівні коду
-      // Якщо є багато атлетів, це може бути неефективно. Краще зберігати в атлетів поле hasTeam: true/false
-      // Доробити завтра
-    }
-    else if (filter === 'withoutTeam' || query === 'no-team') {
-      query_db = query_db.where('teamId', '==', null);
-    }
     
-    if (query !== "all" && query !== 'no-team') {
-      query_db = query_db.where('searchKeywords', 'array-contains', query.toLowerCase());
+    if (filter === 'withTeam') {
+     
+    }
+    else if (filter === 'withoutTeam') {
+      query_db = query_db.where('teamId', '==', null);
     }
     
     const athletesSnapshot = await query_db
       .orderBy('lastName')
-      .offset(offset)
-      .limit(PAGE_SIZE)
-      .get();
+      .get(); 
     
+   
     const teamIds = new Set();
     athletesSnapshot.forEach(doc => {
       const data = doc.data();
@@ -327,25 +299,41 @@ export async function searchAthletes(req, res) {
     
     let athletes = athletesSnapshot.docs.map(doc => {
       const data = doc.data();
-      const teamName = data.teamId ? teamsData[data.teamId] || null : null;
+      const teamName = data.teamId ? teamsData[data.teamId] || '-' : '-';
       
       return {
         id: doc.id,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        middleName: data.middleName || null,
-        patronymic: data.middleName || null, 
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        patronymic: data.middleName || data.patronymic || '', 
         photo: data.photo || null,
         teamId: data.teamId || null,
         teamName: teamName
       };
     });
     
-    if (filter === 'withTeam' && !teamId) {
+
+    if (filter === 'withTeam') {
       athletes = athletes.filter(athlete => athlete.teamId !== null);
     }
-    // console.log(athletes)
-    return res.json({ athletes });
+    
+    if (query && query.trim() !== "") {
+      const searchTerms = query.toLowerCase().trim().split(/\s+/);
+      athletes = athletes.filter(athlete => {
+        const fullName = `${athlete.lastName} ${athlete.firstName} ${athlete.patronymic}`.toLowerCase();
+
+        return searchTerms.some(term => fullName.includes(term));
+      });
+    }
+  
+    const totalCount = athletes.length;
+    athletes = athletes.slice(offset, offset + PAGE_SIZE);
+    
+    return res.json({ 
+      athletes,
+      totalCount,
+      hasMore: offset + PAGE_SIZE < totalCount
+    });
   } catch (err) {
     console.error("Помилка при пошуку спортсменів:", err);
     return res.status(500).json({ 
