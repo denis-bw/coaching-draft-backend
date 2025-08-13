@@ -29,7 +29,6 @@ export const createTeam = async (req, res) => {
       });
     }
 
-    // Створюємо посилання на документ команди
     const teamRef = db.collection('teams').doc();
     const teamId = teamRef.id;
 
@@ -42,7 +41,6 @@ export const createTeam = async (req, res) => {
       logo: null
     };
 
-    // Обробка завантаження фото команди
     if (req.file && req.file.buffer) {
       const uniqueId = `team_${userId}_${Date.now()}`;
       const uploadResult = await new Promise((resolve, reject) => {
@@ -63,20 +61,17 @@ export const createTeam = async (req, res) => {
       teamData.logo = uploadResult.secure_url;
     }
 
-    // Перевіряємо наявність та доступ до спортсменів
     if (value.athleteIds && value.athleteIds.length > 0) {
       const batch = db.batch();
       const invalidAthletes = [];
       const athleteRefs = [];
 
-      // Отримуємо дані про всіх спортсменів
       for (const athleteId of value.athleteIds) {
         const athleteRef = db.collection('athletes').doc(athleteId);
         athleteRefs.push({ ref: athleteRef, id: athleteId });
         
         const athleteDoc = await athleteRef.get();
         
-        // Перевіряємо існування спортсмена
         if (!athleteDoc.exists) {
           invalidAthletes.push({ 
             id: athleteId, 
@@ -87,7 +82,6 @@ export const createTeam = async (req, res) => {
         
         const athleteData = athleteDoc.data();
         
-        // Перевіряємо, чи належить спортсмен поточному користувачу
         if (athleteData.userId !== userId) {
           invalidAthletes.push({ 
             id: athleteId, 
@@ -96,7 +90,6 @@ export const createTeam = async (req, res) => {
           continue;
         }
         
-        // Перевіряємо, чи спортсмен вже в іншій команді
         if (athleteData.teamId?.trim?.()) {
           invalidAthletes.push({
             id: athleteId, 
@@ -113,7 +106,6 @@ export const createTeam = async (req, res) => {
         });
       }
 
-      // Оновлюємо кожного спортсмена, додаючи ID нової команди
       for (const { ref } of athleteRefs) {
         batch.update(ref, { 
           teamId,
@@ -121,13 +113,10 @@ export const createTeam = async (req, res) => {
         });
       }
 
-      // Створюємо нову команду
       batch.set(teamRef, teamData);
 
-      // Застосовуємо всі зміни одночасно
       await batch.commit();
     } else {
-      // Якщо немає спортсменів, просто створюємо команду
       await teamRef.set(teamData);
     }
 
@@ -150,13 +139,6 @@ export const createTeam = async (req, res) => {
 export const getTeams = async (req, res) => {
   try {
     const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        message: "Помилка авторизації",
-        error: "Користувач не авторизований"
-      });
-    }
     
     const { page = 1, name } = req.query; 
     const pageSize = 5; 
@@ -304,6 +286,231 @@ export const getTeamById = async (req, res) => {
     console.error("Помилка при отриманні інформації про команду:", err);
     return res.status(500).json({ 
       message: "Помилка сервера при отриманні інформації про команду", 
+      error: err.message 
+    });
+  }
+};
+
+
+export const updateTeam = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { teamId } = req.params;
+    const { name, ageCategory, athleteIds = [] } = req.body;
+
+    if (!teamId) {
+      return res.status(400).json({
+        message: "Помилка оновлення",
+        error: "ID команди не вказано"
+      });
+    }
+
+    const { error, value } = teamSchema.validate({
+      name,
+      ageCategory,
+      athleteIds
+    }, { abortEarly: false });
+
+    if (error) {
+      return res.status(400).json({ 
+        message: 'Помилка валідації', 
+        details: error.details 
+      });
+    }
+
+    const teamRef = db.collection('teams').doc(teamId);
+    const teamDoc = await teamRef.get();
+
+    if (!teamDoc.exists) {
+      return res.status(404).json({
+        message: "Команду не знайдено",
+        error: "Команда з вказаним ID не існує"
+      });
+    }
+
+    const teamData = teamDoc.data();
+    
+    if (teamData.userId !== userId) {
+      return res.status(403).json({
+        message: "Відмовлено в доступі",
+        error: "У вас немає прав доступу до цієї команди"
+      });
+    }
+
+    const updatedTeamData = {
+      name: value.name,
+      ageCategory: value.ageCategory,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (req.file && req.file.buffer) {
+      const uniqueId = `team_${userId}_${Date.now()}`;
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'teams',
+            public_id: uniqueId,
+            resource_type: 'image',
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+      
+      updatedTeamData.logo = uploadResult.secure_url;
+    }
+
+    const batch = db.batch();
+    const oldAthleteIds = teamData.athleteIds || [];
+    const newAthleteIds = value.athleteIds || [];
+
+    const invalidAthletes = [];
+    
+    for (const athleteId of newAthleteIds) {
+      const athleteRef = db.collection('athletes').doc(athleteId);
+      const athleteDoc = await athleteRef.get();
+      
+      if (!athleteDoc.exists) {
+        invalidAthletes.push({ 
+          id: athleteId, 
+          error: "Спортсмен не існує" 
+        });
+        continue;
+      }
+      
+      const athleteData = athleteDoc.data();
+      
+      if (athleteData.userId !== userId) {
+        invalidAthletes.push({ 
+          id: athleteId, 
+          error: "Немає доступу до цього спортсмена" 
+        });
+        continue;
+      }
+      
+      if (athleteData.teamId && athleteData.teamId !== teamId && athleteData.teamId.trim()) {
+        invalidAthletes.push({
+          id: athleteId, 
+          error: "Спортсмен вже в іншій команді"
+        });
+        continue;
+      }
+    }
+
+    if (invalidAthletes.length > 0) {
+      return res.status(400).json({
+        message: "Помилка при оновленні спортсменів команди",
+        invalidAthletes
+      });
+    }
+
+    const athletesToRemove = oldAthleteIds.filter(id => !newAthleteIds.includes(id));
+    for (const athleteId of athletesToRemove) {
+      const athleteRef = db.collection('athletes').doc(athleteId);
+      batch.update(athleteRef, { 
+        teamId: '',
+        updatedAt: new Date().toISOString() 
+      });
+    }
+
+    const athletesToAdd = newAthleteIds.filter(id => !oldAthleteIds.includes(id));
+    for (const athleteId of athletesToAdd) {
+      const athleteRef = db.collection('athletes').doc(athleteId);
+      batch.update(athleteRef, { 
+        teamId,
+        updatedAt: new Date().toISOString() 
+      });
+    }
+
+    updatedTeamData.athleteIds = newAthleteIds;
+    batch.update(teamRef, updatedTeamData);
+
+    await batch.commit();
+
+    return res.status(200).json({
+      message: "Команду оновлено успішно",
+      team: {
+        id: teamId,
+        ...teamData,
+        ...updatedTeamData,
+      },
+    });
+
+  } catch (err) {
+    console.error("Помилка при оновленні команди:", err);
+    return res.status(500).json({ 
+      message: "Помилка сервера при оновленні команди", 
+      error: err.message 
+    });
+  }
+};
+
+export const deleteTeam = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { teamId } = req.params;
+
+    if (!teamId) {
+      return res.status(400).json({
+        message: "Помилка видалення",
+        error: "ID команди не вказано"
+      });
+    }
+
+    const teamRef = db.collection('teams').doc(teamId);
+    const teamDoc = await teamRef.get();
+
+    if (!teamDoc.exists) {
+      return res.status(404).json({
+        message: "Команду не знайдено",
+        error: "Команда з вказаним ID не існує"
+      });
+    }
+
+    const teamData = teamDoc.data();
+    
+    if (teamData.userId !== userId) {
+      return res.status(403).json({
+        message: "Відмовлено в доступі",
+        error: "У вас немає прав доступу до цієї команди"
+      });
+    }
+
+    const batch = db.batch();
+
+    const athleteIds = teamData.athleteIds || [];
+    
+    for (const athleteId of athleteIds) {
+      const athleteRef = db.collection('athletes').doc(athleteId);
+      const athleteDoc = await athleteRef.get();
+      
+      if (athleteDoc.exists) {
+        const athleteData = athleteDoc.data();
+        if (athleteData.userId === userId && athleteData.teamId === teamId) {
+          batch.update(athleteRef, { 
+            teamId: '',
+            updatedAt: new Date().toISOString() 
+          });
+        }
+      }
+    }
+
+    batch.delete(teamRef);
+
+    await batch.commit();
+
+    return res.status(200).json({
+      message: "Команду видалено успішно",
+      deletedTeamId: teamId
+    });
+
+  } catch (err) {
+    console.error("Помилка при видаленні команди:", err);
+    return res.status(500).json({ 
+      message: "Помилка сервера при видаленні команди", 
       error: err.message 
     });
   }

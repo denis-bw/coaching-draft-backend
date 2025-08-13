@@ -8,6 +8,8 @@ import profileRouter from './routes/api/user-profile-router.js'
 import athletesRouter from './routes/api/athletes-router.js';
 import teamsRouter from './routes/api/teams-router.js';
 
+
+
 const app = express();
 app.set('trust proxy', 1);
 const formatsLogger = app.get('env') === 'development' ? 'dev' : 'short';
@@ -55,6 +57,8 @@ async function startServer() {
 app.use('/api/auth', authRouter, profileRouter);
 app.use('/api/athletes', athletesRouter);
 app.use('/api/teams', teamsRouter);
+
+
 app.use((req, res) => {
   res.status(404).json({ message: 'Not found' });
 });
