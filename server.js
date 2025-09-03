@@ -24,7 +24,7 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS')); 
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Accept'], 
   preflightContinue: false,
   optionsSuccessStatus: 200,

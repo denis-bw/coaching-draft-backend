@@ -248,17 +248,14 @@ export async function searchAthletes(req, res) {
   try {
     const userId = req.user?.id;
    
-
     const { query = "", page = 1, filter = 'all' } = req.query;
     const PAGE_SIZE = 10;
     const offset = (page - 1) * PAGE_SIZE;
 
-    // Основний запит спортсменів
     let athletesQuery = db.collection('athletes')
       .where('userId', '==', userId)
       .orderBy('lastName');
 
-    // Додаємо фільтрацію по команді тільки для фільтрів withTeam/withoutTeam
     if (filter === 'withTeam') {
       athletesQuery = athletesQuery.where('teamId', '!=', null);
     } else if (filter === 'withoutTeam') {
@@ -267,17 +264,16 @@ export async function searchAthletes(req, res) {
 
     const athletesSnapshot = await athletesQuery.get();
 
-    // Для фільтра 'all' або 'withTeam' отримуємо назви команд
+
     let teamsMap = {};
     if (filter === 'all' || filter === 'withTeam') {
-      // Отримуємо унікальні teamId (ігноруємо null/undefined)
+ 
       const teamIds = [...new Set(
         athletesSnapshot.docs
           .map(doc => doc.data().teamId)
           .filter(teamId => teamId)
       )];
 
-      // Отримуємо назви команд одним запитом (якщо є teamIds)
       if (teamIds.length > 0) {
         const teamsSnapshot = await db.collection('teams')
           .where(admin.firestore.FieldPath.documentId(), 'in', teamIds)
@@ -289,7 +285,6 @@ export async function searchAthletes(req, res) {
       }
     }
 
-    // Формуємо відповідь
     const athletes = athletesSnapshot.docs.map(doc => {
       const data = doc.data();
       const teamId = data.teamId || null;
@@ -306,7 +301,6 @@ export async function searchAthletes(req, res) {
       };
     });
 
-    // Фільтрація по пошуковому запиту
     const filteredAthletes = query.trim() 
       ? athletes.filter(athlete => {
           const searchStr = `${athlete.lastName} ${athlete.firstName} ${athlete.patronymic}`.toLowerCase();
@@ -314,7 +308,6 @@ export async function searchAthletes(req, res) {
         })
       : athletes;
 
-    // Пагінація
     const totalCount = filteredAthletes.length;
     const paginatedAthletes = filteredAthletes.slice(offset, offset + PAGE_SIZE);
 
@@ -328,6 +321,83 @@ export async function searchAthletes(req, res) {
     console.error("Помилка при пошуку спортсменів:", err);
     return res.status(500).json({ 
       message: "Помилка сервера", 
+      error: err.message 
+    });
+  }
+}
+
+export async function searchTeamAthletes(req, res) {
+  try {
+    const userId = req.user?.id;
+    const { teamId } = req.params;
+    const { query = "", page = 1 } = req.query;
+    
+    if (!teamId) {
+      return res.status(400).json({
+        message: "Помилка отримання даних",
+        error: "ID команди не вказано"
+      });
+    }
+
+    const PAGE_SIZE = 10;
+    const offset = (page - 1) * PAGE_SIZE;
+
+    const teamDoc = await db.collection('teams').doc(teamId).get();
+    
+    if (!teamDoc.exists) {
+      return res.status(404).json({
+        message: "Команду не знайдено"
+      });
+    }
+
+    const teamData = teamDoc.data();
+    if (teamData.userId !== userId) {
+      return res.status(403).json({
+        message: "Відмовлено в доступі",
+        error: "У вас немає прав доступу до цієї команди"
+      });
+    }
+
+    let athletesQuery = db.collection('athletes')
+      .where('userId', '==', userId)
+      .where('teamId', '==', teamId)
+      .orderBy('lastName');
+
+    const athletesSnapshot = await athletesQuery.get();
+
+    const athletes = athletesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        patronymic: data.patronymic || data.middleName || '',
+        photo: data.photo || null,
+        teamId: data.teamId,
+        teamName: teamData.name
+      };
+    });
+
+    const filteredAthletes = query.trim() 
+      ? athletes.filter(athlete => {
+          const searchStr = `${athlete.lastName} ${athlete.firstName} ${athlete.patronymic}`.toLowerCase();
+          return searchStr.includes(query.toLowerCase());
+        })
+      : athletes;
+
+    const totalCount = filteredAthletes.length;
+    const paginatedAthletes = filteredAthletes.slice(offset, offset + PAGE_SIZE);
+
+    return res.json({
+      athletes: paginatedAthletes,
+      totalCount,
+      hasMore: offset + PAGE_SIZE < totalCount
+    });
+
+  } catch (err) {
+    console.error("Помилка при пошуку спортсменів команди:", err);
+    return res.status(500).json({ 
+      message: "Помилка сервера при пошуку спортсменів команди", 
       error: err.message 
     });
   }
