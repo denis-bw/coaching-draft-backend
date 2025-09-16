@@ -9,25 +9,20 @@ cloudinary.config({
   secure: true,
 });
 
-// Константи
 const STORAGE_LIMIT_BYTES =  500 * 1024 * 1024; 
 
-// Допоміжна функція для підрахунку використаного сховища користувача
 const getUserStorageUsage = async (userId) => {
   try {
-    // Отримуємо всі команди користувача
     const userTeamsSnapshot = await db.collection('teams')
       .where('userId', '==', userId)
       .get();
 
     let totalStorageUsed = 0;
 
-    // Для кожної команди рахуємо розмір всіх фото в галереї
     for (const teamDoc of userTeamsSnapshot.docs) {
       const teamData = teamDoc.data();
       const galleryPhotos = teamData.gallery || [];
       
-      // Рахуємо розмір всіх фото в галереї команди
       for (const photo of galleryPhotos) {
         if (photo.size) {
           totalStorageUsed += photo.size;
@@ -42,7 +37,6 @@ const getUserStorageUsage = async (userId) => {
   }
 };
 
-// Допоміжна функція для розрахунку відсотка використання
 const calculateStoragePercentage = (usedBytes) => {
   return Math.round((usedBytes / STORAGE_LIMIT_BYTES) * 100);
 };
@@ -76,8 +70,8 @@ export const createTeam = async (req, res) => {
       athleteIds: value.athleteIds,
       createdAt: new Date().toISOString(),
       logo: null,
-      gallery: [], // Ініціалізуємо порожню галерею
-      galleryCount: 0 // Лічильник фото в галереї
+      gallery: [], 
+      galleryCount: 0 
     };
 
     if (req.file && req.file.buffer) {
@@ -314,11 +308,9 @@ export const getTeamById = async (req, res) => {
       }
     }
 
-    // Отримуємо тільки останнє фото для основної сторінки
     const gallery = teamData.gallery || [];
     const lastPhoto = gallery.length > 0 ? gallery[0] : null;
 
-    // Отримуємо інформацію про сховище
     const totalStorageUsed = await getUserStorageUsage(userId);
     const storagePercentage = calculateStoragePercentage(totalStorageUsed);
 
@@ -356,15 +348,16 @@ export const getTeamById = async (req, res) => {
   }
 };
 
-// Решта функцій залишається без змін...
 export const updateTeam = async (req, res) => {
   try {
     const userId = req.user?.id;
     const { teamId } = req.params;
-    const { name, ageCategory } = req.body;
+    const userData = req.body;
+    const { name, ageCategory } = userData;
     
-    const shouldUpdateAthletes = 'athleteIds' in req.body;
-    const athleteIds = shouldUpdateAthletes ? (req.body.athleteIds || []) : null;
+    const shouldUpdateAthletes = 'athleteIds' in userData;
+    const athleteIds = shouldUpdateAthletes ? (userData.athleteIds || []) : null;
+    const shouldDeleteLogo = userData.deleteLogo === 'true';
 
     if (!teamId) {
       return res.status(400).json({
@@ -373,6 +366,14 @@ export const updateTeam = async (req, res) => {
       });
     }
 
+    if (Object.keys(userData).length === 0 && !req.file && !shouldDeleteLogo) {
+      return res.status(400).json({ 
+        message: "Немає даних для оновлення" 
+      });
+    }
+
+    delete userData.deleteLogo;
+
     const validationData = { name, ageCategory };
     if (shouldUpdateAthletes) {
       validationData.athleteIds = athleteIds;
@@ -380,7 +381,7 @@ export const updateTeam = async (req, res) => {
 
     const { error, value } = teamSchema.validate(validationData, { abortEarly: false });
 
-    if (error) {
+    if (error && !shouldDeleteLogo) {
       return res.status(400).json({ 
         message: 'Помилка валідації', 
         details: error.details 
@@ -406,6 +407,38 @@ export const updateTeam = async (req, res) => {
       });
     }
 
+    const deleteLogoFromCloudinary = async (logoUrl) => {
+      if (!logoUrl) return;
+      
+      try {
+        const urlParts = logoUrl.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        const publicId = `teams/${fileName.split('.')[0]}`;
+        
+        const result = await cloudinary.uploader.destroy(publicId);
+        console.log("Результат видалення логотипу з Cloudinary:", result);
+      } catch (err) {
+        console.error("Помилка при видаленні логотипу з Cloudinary:", err);
+      }
+    };
+
+    if (shouldDeleteLogo) {
+      if (teamData.logo) {
+        await deleteLogoFromCloudinary(teamData.logo);
+      }
+      
+      const updateData = { 
+        logo: null,
+        updatedAt: new Date().toISOString()
+      };
+      await teamRef.update(updateData);
+      
+      return res.status(200).json({
+        message: "Логотип команди видалено",
+        updatedFields: updateData
+      });
+    }
+
     const updatedTeamData = {
       name: value.name,
       ageCategory: value.ageCategory,
@@ -413,23 +446,44 @@ export const updateTeam = async (req, res) => {
     };
 
     if (req.file && req.file.buffer) {
-      const uniqueId = `team_${userId}_${Date.now()}`;
-      const uploadResult = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: 'teams',
-            public_id: uniqueId,
-            resource_type: 'image',
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        );
-        stream.end(req.file.buffer);
-      });
-      
-      updatedTeamData.logo = uploadResult.secure_url;
+      if (teamData.logo) {
+        await deleteLogoFromCloudinary(teamData.logo);
+      }
+
+      try {
+        const uniqueId = `team_${userId}_${Date.now()}`;
+        
+        const uploadResult = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: 'teams',
+              transformation: [{
+                width: 200,
+                height: 200,
+                crop: "fill"
+              }],
+              public_id: uniqueId,
+              resource_type: 'image',
+            },
+            (error, result) => {
+              if (error) {
+                console.error("Помилка при завантаженні логотипу в Cloudinary:", error);
+                reject(error);
+              } else {
+                resolve(result);
+              }
+            }
+          );
+          stream.end(req.file.buffer);
+        });
+        
+        updatedTeamData.logo = uploadResult.secure_url;
+      } catch (cloudinaryError) {
+        console.error("Помилка при завантаженні логотипу в Cloudinary:", cloudinaryError);
+        return res.status(500).json({
+          message: "Помилка при завантаженні логотипу"
+        });
+      }
     }
 
     const batch = db.batch();
@@ -504,7 +558,7 @@ export const updateTeam = async (req, res) => {
     await batch.commit();
 
     return res.status(200).json({
-      message: "Команду оновлено успішно",
+      message: req.file ? "Команду оновлено з новим логотипом" : "Команду оновлено успішно",
       team: {
         id: teamId,
         ...teamData,
@@ -554,7 +608,6 @@ export const deleteTeam = async (req, res) => {
 
     const batch = db.batch();
 
-    // Видаляємо зв'язки спортсменів з командою
     const athleteIds = teamData.athleteIds || [];
     
     for (const athleteId of athleteIds) {
@@ -572,7 +625,6 @@ export const deleteTeam = async (req, res) => {
       }
     }
 
-    // Видаляємо всі фото з галереї з Cloudinary
     const galleryPhotos = teamData.gallery || [];
     for (const photo of galleryPhotos) {
       try {
@@ -581,7 +633,7 @@ export const deleteTeam = async (req, res) => {
         }
       } catch (cloudinaryError) {
         console.error("Помилка при видаленні фото з Cloudinary:", cloudinaryError);
-        // Продовжуємо навіть якщо не вдалося видалити з Cloudinary
+  
       }
     }
 
@@ -857,9 +909,7 @@ export const removeAthletesFromTeam = async (req, res) => {
   }
 };
 
-// ОНОВЛЕНІ функції галереї з пагінацією
 
-// Оновлена функція getTeamGallery в teams-controller.js
 export const getTeamGallery = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -877,7 +927,6 @@ export const getTeamGallery = async (req, res) => {
     const pageSize = 30;
     const offset = (pageNum - 1) * pageSize;
 
-    // Перевіряємо права доступу до команди
     const teamDoc = await db.collection('teams').doc(teamId).get();
 
     if (!teamDoc.exists) {
@@ -896,13 +945,11 @@ export const getTeamGallery = async (req, res) => {
       });
     }
 
-    // Отримуємо фото галереї з БД з пагінацією
     const galleryPhotos = teamData.gallery || [];
     const totalPhotos = galleryPhotos.length;
     const paginatedPhotos = galleryPhotos.slice(offset, offset + pageSize);
     const hasMore = offset + pageSize < totalPhotos;
 
-    // Отримуємо інформацію про використання сховища
     const totalStorageUsed = await getUserStorageUsage(userId);
     const storagePercentage = calculateStoragePercentage(totalStorageUsed);
 
@@ -957,8 +1004,7 @@ export const uploadTeamPhoto = async (req, res) => {
       });
     }
 
-    // Перевіряємо розмір файлу (5MB ліміт)
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; 
     if (req.file.buffer.length > MAX_FILE_SIZE) {
       return res.status(413).json({
         message: "Файл занадто великий",
@@ -966,7 +1012,6 @@ export const uploadTeamPhoto = async (req, res) => {
       });
     }
 
-    // Перевіряємо права доступу до команди
     const teamDoc = await db.collection('teams').doc(teamId).get();
 
     if (!teamDoc.exists) {
@@ -985,7 +1030,6 @@ export const uploadTeamPhoto = async (req, res) => {
       });
     }
 
-    // Перевіряємо ліміт сховища
     const currentStorageUsed = await getUserStorageUsage(userId);
     const fileSize = req.file.buffer.length;
 
@@ -1006,12 +1050,11 @@ export const uploadTeamPhoto = async (req, res) => {
       });
     }
 
-    // Завантажуємо до Cloudinary в окрему папку для галереї
     const uniqueId = `team_gallery_${teamId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const uploadResult = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
-          folder: 'team_galleries', // Окрема папка для галерей команд
+          folder: 'team_galleries',
           public_id: uniqueId,
           resource_type: 'image',
         },
@@ -1023,7 +1066,6 @@ export const uploadTeamPhoto = async (req, res) => {
       stream.end(req.file.buffer);
     });
 
-    // Створюємо об'єкт фото для збереження в БД
     const newPhoto = {
       id: uniqueId,
       url: uploadResult.secure_url,
@@ -1032,7 +1074,6 @@ export const uploadTeamPhoto = async (req, res) => {
       uploadedAt: new Date().toISOString()
     };
 
-    // Оновлюємо галерею в команді (додаємо на початок)
     const currentGallery = teamData.gallery || [];
     const updatedGallery = [newPhoto, ...currentGallery];
     const newGalleryCount = updatedGallery.length;
@@ -1043,7 +1084,6 @@ export const uploadTeamPhoto = async (req, res) => {
       updatedAt: new Date().toISOString()
     });
 
-    // Розраховуємо нову інформацію про сховище
     const newStorageUsed = currentStorageUsed + fileSize;
     const newStoragePercentage = calculateStoragePercentage(newStorageUsed);
 
@@ -1084,7 +1124,6 @@ export const deleteTeamPhoto = async (req, res) => {
       });
     }
 
-    // Перевіряємо права доступу до команди
     const teamDoc = await db.collection('teams').doc(teamId).get();
 
     if (!teamDoc.exists) {
@@ -1103,7 +1142,6 @@ export const deleteTeamPhoto = async (req, res) => {
       });
     }
 
-    // Знаходимо фото в галереї
     const currentGallery = teamData.gallery || [];
     const photoToDelete = currentGallery.find(photo => photo.id === photoId);
 
@@ -1114,17 +1152,14 @@ export const deleteTeamPhoto = async (req, res) => {
       });
     }
 
-    // Видаляємо з Cloudinary
     try {
       if (photoToDelete.publicId) {
         await cloudinary.uploader.destroy(photoToDelete.publicId);
       }
     } catch (cloudinaryError) {
       console.error("Помилка при видаленні з Cloudinary:", cloudinaryError);
-      // Продовжуємо видалення з БД навіть якщо не вдалося видалити з Cloudinary
     }
 
-    // Оновлюємо галерею в БД
     const updatedGallery = currentGallery.filter(photo => photo.id !== photoId);
     const newGalleryCount = updatedGallery.length;
 
@@ -1134,7 +1169,6 @@ export const deleteTeamPhoto = async (req, res) => {
       updatedAt: new Date().toISOString()
     });
 
-    // Розраховуємо нову інформацію про сховище
     const newStorageUsed = await getUserStorageUsage(userId);
     const newStoragePercentage = calculateStoragePercentage(newStorageUsed);
 
@@ -1158,7 +1192,6 @@ export const deleteTeamPhoto = async (req, res) => {
   }
 };
 
-// Додаткова функція для отримання інформації про сховище користувача
 export const getUserStorageInfo = async (req, res) => {
   try {
     const userId = req.user?.id;
